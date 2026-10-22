@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    name: host tests (${{ matrix.cc }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install clang
+        if: matrix.cc == 'clang'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang
+      - name: fmt / udiv64 / ring with ASan + UBSan
+        run: make host-test HOSTCC=${{ matrix.cc }}
+
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-misc
+          qemu-system-riscv32 --version
+      - name: Build
+        run: make all build/firmware-auto.elf && make size
+      - name: Self-tests on QEMU (exit status from the sifive_test finisher)
+        run: timeout 30 make qemu-test
